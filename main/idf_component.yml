@@ -1,0 +1,18 @@
+dependencies:
+  idf: ">=5.3"
+
+  # Waveshare's board support package for this exact board: MIPI-DSI panel
+  # init (via espressif/esp_lcd_ek79007), touch controller, backlight, I2C bus.
+  waveshare/esp32_p4_wifi6_touch_lcd_7b: "^1.0.2"
+
+  # Lets the ESP32-P4 use the standard esp_wifi API while the radio itself
+  # lives on the onboard ESP32-C6, reached over SDIO.
+  espressif/esp_wifi_remote: "*"
+  espressif/esp_hosted: "*"
+
+  # NOTE: package names/versions on the component registry do shift over
+  # time. If `idf.py add-dependency` reports a different name for the
+  # hosted-transport component than `espressif/esp_hosted`, use whatever
+  # it resolves to - the Wiki's own instructions are the source of truth:
+  #   idf.py add-dependency "espressif/esp_wifi_remote"
+  #   idf.py add-dependency "espressif/esp_hosted"
