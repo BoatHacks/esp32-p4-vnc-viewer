@@ -54,10 +54,13 @@ void rfb_client_destroy(rfb_client_t *client);
 
 /* Opens the TCP connection and runs the full RFB handshake (protocol
  * version negotiation, security type selection, VNC auth if requested,
- * ClientInit/ServerInit). Blocks until the handshake finishes or fails.
- * `password` may be NULL/empty if the server offers Security-Type "None". */
+ * ClientInit/ServerInit). Blocks until the handshake finishes or fails,
+ * bounded by connect_timeout_ms (covers both the initial TCP connect - so
+ * an unreachable/wrong host fails fast instead of hanging - and each
+ * individual handshake read/write). `password` may be NULL/empty if the
+ * server offers Security-Type "None". */
 esp_err_t rfb_client_connect(rfb_client_t *client, const char *host, uint16_t port,
-                              const char *password);
+                              const char *password, uint32_t connect_timeout_ms);
 
 /* Blocking receive loop - reads and dispatches server->client messages
  * (FramebufferUpdate, Bell, ServerCutText, SetColourMapEntries) until the

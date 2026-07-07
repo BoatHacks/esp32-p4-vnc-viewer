@@ -21,8 +21,15 @@ main/
                       keyboard for the password -> connect. Shown on first
                       boot (nothing saved yet) and again any time the saved
                       network stops working.
+  vnc_config.c/.h     NVS-backed storage for the last-used VNC host/port/
+                      password.
+  vnc_setup_ui.c/.h   LVGL dialog: host/port/password fields + on-screen
+                      keyboard + Connect button, attempting a real RFB
+                      handshake with a bounded timeout. Shown on first boot
+                      (nothing saved yet) and again after a few consecutive
+                      connection failures.
   main.c              Wires BSP display/touch init + Wi-Fi + the VNC client
-                      together. Fill in your VNC server details here.
+                      together.
 ```
 
 ## Wi-Fi setup flow
@@ -40,6 +47,21 @@ main/
   quickest way to clear it is `idf.py erase-flash` (which also wipes
   everything else in NVS) or adding a small `wifi_creds_clear()` call
   behind a long-press gesture if you want something less blunt.
+
+## VNC server setup flow
+
+- **First boot** (no server saved yet): the connection dialog appears
+  immediately (host/IP, port, optional password).
+- **Saved server fails 3 times in a row** (wrong IP, server down,
+  password changed, etc. - each attempt bounded to 8s so a bad address
+  fails fast rather than hanging): same dialog reappears, pre-filled with
+  the last-used values so you're only fixing what's wrong.
+- Whatever connects successfully is saved to NVS (`vnc_cfg` namespace:
+  `host`, `port`, `pass`) and becomes the new default for next boot and
+  future reconnects.
+- Unlike the Wi-Fi dialog, there's no separate "connection lost" watchdog
+  here - `vnc_task` in `main.c` already polls the connection directly, so
+  repeated failures are just counted in that same loop.
 
 ## One-time setup
 

@@ -6,6 +6,8 @@
 
 #include "wifi_manager.h"
 #include "wifi_setup_ui.h"
+#include "vnc_config.h"
+#include "vnc_setup_ui.h"
 #include "rfb_client.h"
 #include "vnc_display.h"
 
@@ -41,14 +43,12 @@
 static const char *TAG = "vnc_main";
 
 /* ---- fill these in (or load from NVS / a config file) ------------------- */
-#define VNC_HOST        "192.168.1.100"
-#define VNC_PORT        5900
-#define VNC_PASSWORD    "" /* leave empty if the server allows Security-Type None */
-
 #define PANEL_WIDTH     1024
 #define PANEL_HEIGHT    600
 
 #define SAVED_WIFI_CONNECT_TIMEOUT_MS   15000
+#define SAVED_VNC_CONNECT_TIMEOUT_MS    8000
+#define VNC_MAX_CONSECUTIVE_FAILURES    3   /* before re-showing the setup dialog */
 
 static esp_err_t board_display_touch_init(esp_lcd_panel_handle_t *out_panel,
                                            esp_lcd_panel_io_handle_t *out_io,
@@ -167,19 +167,46 @@ static void wifi_watchdog_task(void *arg)
 static void vnc_task(void *arg)
 {
     rfb_client_t *client = (rfb_client_t *)arg;
+    int consecutive_failures = 0;
 
     while (1) {
         /* If Wi-Fi is down (initial outage or mid-session loss), wait
          * here instead of spinning on failed connect attempts - the
-         * watchdog task above is the one driving recovery via the UI. */
+         * Wi-Fi watchdog task is the one driving recovery via its UI. */
         wifi_manager_wait_connected(portMAX_DELAY);
 
-        ESP_LOGI(TAG, "Connecting to VNC server at %s:%d ...", VNC_HOST, VNC_PORT);
-        esp_err_t err = rfb_client_connect(client, VNC_HOST, VNC_PORT, VNC_PASSWORD);
+        char host[VNC_CONFIG_HOST_MAX_LEN + 1] = {0};
+        uint16_t port = 0;
+        char password[VNC_CONFIG_PASS_MAX_LEN + 1] = {0};
+        bool have_cfg = vnc_config_load(host, sizeof(host), &port, password, sizeof(password));
+
+        esp_err_t err = ESP_FAIL;
+        if (have_cfg) {
+            ESP_LOGI(TAG, "Connecting to VNC server at %s:%u ...", host, port);
+            err = rfb_client_connect(client, host, port, password, SAVED_VNC_CONNECT_TIMEOUT_MS);
+        }
+
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Connect/handshake failed: %s - retrying in 3s", esp_err_to_name(err));
-            vTaskDelay(pdMS_TO_TICKS(3000));
-            continue;
+            consecutive_failures++;
+            if (!have_cfg) {
+                ESP_LOGI(TAG, "No VNC server configured yet - showing setup screen");
+            } else {
+                ESP_LOGE(TAG, "Connect/handshake to %s:%u failed: %s (%d/%d)",
+                         host, port, esp_err_to_name(err), consecutive_failures, VNC_MAX_CONSECUTIVE_FAILURES);
+            }
+
+            if (!have_cfg || consecutive_failures >= VNC_MAX_CONSECUTIVE_FAILURES) {
+                vnc_display_pause_touch(true);
+                vnc_setup_ui_run(client); /* blocks; client is connected on return */
+                lvgl_yield_to_vnc();
+                vnc_display_pause_touch(false);
+                consecutive_failures = 0;
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                continue;
+            }
+        } else {
+            consecutive_failures = 0;
         }
 
         vnc_display_start_touch_task(client);

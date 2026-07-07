@@ -4,6 +4,8 @@ idf_component_register(
         "wifi_creds.c"
         "wifi_manager.c"
         "wifi_setup_ui.c"
+        "vnc_config.c"
+        "vnc_setup_ui.c"
         "rfb_client.c"
         "vnc_display.c"
     INCLUDE_DIRS "."

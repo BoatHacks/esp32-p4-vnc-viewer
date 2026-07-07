@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <fcntl.h>
+#include <sys/select.h>
 
 #include "esp_log.h"
 #include "mbedtls/des.h"
@@ -440,7 +442,8 @@ void rfb_client_destroy(rfb_client_t *c)
     free(c);
 }
 
-esp_err_t rfb_client_connect(rfb_client_t *c, const char *host, uint16_t port, const char *password)
+esp_err_t rfb_client_connect(rfb_client_t *c, const char *host, uint16_t port,
+                              const char *password, uint32_t connect_timeout_ms)
 {
     char port_str[6];
     snprintf(port_str, sizeof(port_str), "%u", port);
@@ -456,15 +459,56 @@ esp_err_t rfb_client_connect(rfb_client_t *c, const char *host, uint16_t port, c
     int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (sock < 0) { freeaddrinfo(res); return ESP_FAIL; }
 
-    if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
-        ESP_LOGE(TAG, "connect() to %s:%u failed: errno %d", host, port, errno);
-        close(sock);
-        freeaddrinfo(res);
-        return ESP_FAIL;
-    }
+    /* Non-blocking connect + select(), so an unreachable host or a wrong
+     * IP that just silently drops packets fails within connect_timeout_ms
+     * instead of hanging on the kernel's much longer default TCP timeout -
+     * important since this is what the setup dialog is bounded by. */
+    int orig_flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, orig_flags | O_NONBLOCK);
+
+    int rc = connect(sock, res->ai_addr, res->ai_addrlen);
     freeaddrinfo(res);
 
-    /* Keep the connection responsive on a Wi-Fi link that may briefly stall. */
+    if (rc != 0 && errno != EINPROGRESS) {
+        ESP_LOGE(TAG, "connect() to %s:%u failed immediately: errno %d", host, port, errno);
+        close(sock);
+        return ESP_FAIL;
+    }
+    if (rc != 0) {
+        fd_set wfds;
+        FD_ZERO(&wfds);
+        FD_SET(sock, &wfds);
+        struct timeval tv = {
+            .tv_sec = connect_timeout_ms / 1000,
+            .tv_usec = (connect_timeout_ms % 1000) * 1000,
+        };
+        int sel = select(sock + 1, NULL, &wfds, NULL, &tv);
+        if (sel <= 0) {
+            ESP_LOGE(TAG, "connect() to %s:%u timed out after %ums", host, port, (unsigned)connect_timeout_ms);
+            close(sock);
+            return ESP_ERR_TIMEOUT;
+        }
+        int so_err = 0;
+        socklen_t so_len = sizeof(so_err);
+        getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_err, &so_len);
+        if (so_err != 0) {
+            ESP_LOGE(TAG, "connect() to %s:%u failed: errno %d", host, port, so_err);
+            close(sock);
+            return ESP_FAIL;
+        }
+    }
+
+    /* Back to blocking mode, with a bounded timeout on the handshake reads
+     * and writes too - a host that accepts the TCP connection but never
+     * speaks RFB shouldn't hang the dialog either. */
+    fcntl(sock, F_SETFL, orig_flags);
+    struct timeval rw_tv = {
+        .tv_sec = connect_timeout_ms / 1000,
+        .tv_usec = (connect_timeout_ms % 1000) * 1000,
+    };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rw_tv, sizeof(rw_tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &rw_tv, sizeof(rw_tv));
+
     int nodelay = 1;
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
@@ -473,8 +517,17 @@ esp_err_t rfb_client_connect(rfb_client_t *c, const char *host, uint16_t port, c
     if (err != ESP_OK) {
         close(sock);
         c->sock = -1;
+        return err;
     }
-    return err;
+
+    /* Handshake is done - lift the timeout for the steady-state receive
+     * loop. FramebufferUpdates can legitimately be minutes apart if the
+     * remote screen is idle; that's not a dead connection. */
+    struct timeval no_tv = {0, 0};
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &no_tv, sizeof(no_tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &no_tv, sizeof(no_tv));
+
+    return ESP_OK;
 }
 
 void rfb_client_disconnect(rfb_client_t *c)
