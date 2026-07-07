@@ -82,11 +82,13 @@ static esp_err_t board_display_touch_init(esp_lcd_panel_handle_t *out_panel,
 static esp_err_t lvgl_init_for_panel(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t io,
                                       esp_lcd_touch_handle_t touch, lv_disp_t **out_disp)
 {
+    (void)io; /* not used for MIPI-DSI - see lvgl_port_add_disp_dsi() below */
+
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
     ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
 
     const lvgl_port_display_cfg_t disp_cfg = {
-        .io_handle = io,
+        .io_handle = NULL, /* MIPI-DSI has no separate panel IO handle */
         .panel_handle = panel,
         .buffer_size = PANEL_WIDTH * 100,
         .double_buffer = true,
@@ -104,7 +106,21 @@ static esp_err_t lvgl_init_for_panel(esp_lcd_panel_handle_t panel, esp_lcd_panel
             .swap_bytes = false,
         },
     };
-    *out_disp = lvgl_port_add_disp(&disp_cfg);
+    /* Real hardware crash (Instruction access fault, MEPC=0x0) using the
+     * generic lvgl_port_add_disp(): that path is for I2C/SPI/I8080 panels
+     * only and asserts disp_cfg->io_handle != NULL, then registers an IO
+     * event callback on it - with asserts compiled out in a release
+     * build, a NULL io_handle (which MIPI-DSI panels genuinely have, per
+     * the BSP source) turns into a null function-pointer call instead of
+     * a clean abort. lvgl_port_add_disp_dsi() is the correct entry point
+     * for this panel type - it registers its callback on panel_handle
+     * via esp_lcd_dpi_panel_register_event_callbacks() instead. */
+    const lvgl_port_display_dsi_cfg_t dsi_cfg = {
+        .flags = {
+            .avoid_tearing = false,
+        },
+    };
+    *out_disp = lvgl_port_add_disp_dsi(&disp_cfg, &dsi_cfg);
     if (!*out_disp) return ESP_FAIL;
 
     const lvgl_port_touch_cfg_t touch_cfg = {
