@@ -46,11 +46,10 @@ jobs:
 
       - name: Rename to the asset name OTA looks for
         run: |
-          # PROJECT_VER (see CMakeLists.txt) already stamps the running
-          # image's reported version - this filename is a separate,
-          # fixed convention ota_update.c matches against so it doesn't
-          # need to guess the CMake project name.
-          cp build/*.bin "${ASSET_NAME}"
+          # build/ also contains bootloader.bin, partition-table.bin,
+          # ota_data_initial.bin etc. - "*.bin" would match all of them.
+          # The app image is named after the CMake project() name.
+          cp build/esp32_p4_vnc_viewer.bin "${ASSET_NAME}"
 
       - name: Attach binary to the release
         env:
