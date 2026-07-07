@@ -16,14 +16,14 @@
 
 /* --- board-specific bring-up --------------------------------------------
  *
- * This is the one part of the project that leans on the Waveshare BSP
- * component (waveshare/esp32_p4_wifi6_touch_lcd_7b) and therefore needs to
- * be checked against whatever version idf_component.yml pulled in.
- *
- * The BSP follows Espressif's standard "esp-bsp" pattern used across their
- * boards, so bsp_display_new()/bsp_display_backlight_on()/bsp_touch_new()
- * below are the conventional entry points - but component versions do
- * shift their exact signatures. Before your first build:
+ * This leans on the Waveshare BSP component
+ * (waveshare/esp32_p4_wifi6_touch_lcd_7b). Verified directly against the
+ * v2.0.0 source (github.com/waveshareteam/Waveshare-ESP32-components,
+ * bsp/esp32_p4_wifi6_touch_lcd_7b): bsp_display_new()'s config struct is
+ * genuinely just {int dummy;}, and bsp_touch_new() lives in bsp/touch.h,
+ * which esp-bsp.h does NOT transitively include - hence the separate
+ * #include below. If a future BSP release changes either of these,
+ * that's where to look first.
  *
  *   idf.py add-dependency "waveshare/esp32_p4_wifi6_touch_lcd_7b"
  *   idf.py add-dependency "espressif/esp_wifi_remote"
@@ -33,13 +33,12 @@
  *        -> select the panel type for this board
  *     -> Component config -> Wi-Fi Remote -> slave target -> esp32-c6
  *
- * then open `managed_components/waveshare__esp32_p4_wifi6_touch_lcd_7b/
- * include/bsp/esp-bsp.h` and check board_display_touch_init() below
- * against the real signatures. Everything past that point - including how
- * LVGL gets wired up for the Wi-Fi setup screens - uses only the stable,
- * board-independent esp_lvgl_port API, so it shouldn't need changes.
+ * Everything past this section - including how LVGL gets wired up for
+ * the Wi-Fi setup screens - uses only the stable, board-independent
+ * esp_lvgl_port API, so it shouldn't need changes.
  */
 #include "bsp/esp-bsp.h"
+#include "bsp/touch.h" /* not pulled in by esp-bsp.h in this BSP version - bsp_touch_new() lives here */
 
 static const char *TAG = "vnc_main";
 
@@ -62,9 +61,10 @@ static esp_err_t board_display_touch_init(esp_lcd_panel_handle_t *out_panel,
                                            esp_lcd_panel_io_handle_t *out_io,
                                            esp_lcd_touch_handle_t *out_touch)
 {
-    const bsp_display_config_t disp_cfg = {
-        .max_transfer_sz = PANEL_WIDTH * 100 * 2, /* a chunk of rows at a time */
-    };
+    /* bsp_display_config_t is genuinely just {int dummy;} in this BSP
+     * version - there's no transfer-size or other tunable here despite
+     * what an earlier version of this comment assumed. */
+    const bsp_display_config_t disp_cfg = {0};
     ESP_ERROR_CHECK(bsp_display_new(&disp_cfg, out_panel, out_io));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(*out_panel, true));
     bsp_display_backlight_on();
