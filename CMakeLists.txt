@@ -13,6 +13,6 @@ idf_build_set_property(COMPILE_OPTIONS "-Wno-error=implicit-function-declaration
 # Set explicitly rather than relying on `git describe` (which ESP-IDF
 # otherwise prefers for a project inside a git repo) so the embedded app
 # version doesn't drift between tagged releases.
-set(PROJECT_VER "v0.2.4")
+set(PROJECT_VER "v0.2.5")
 
 project(esp32_p4_vnc_viewer)

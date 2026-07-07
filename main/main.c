@@ -66,7 +66,10 @@ static esp_err_t board_display_touch_init(esp_lcd_panel_handle_t *out_panel,
      * what an earlier version of this comment assumed. */
     const bsp_display_config_t disp_cfg = {0};
     ESP_ERROR_CHECK(bsp_display_new(&disp_cfg, out_panel, out_io));
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(*out_panel, true));
+    /* Real hardware crash: esp_lcd_panel_disp_on_off() returns
+     * ESP_ERR_NOT_SUPPORTED for this MIPI-DSI panel (esp_lcd_ek79007) -
+     * confirmed the BSP itself never calls it either, so the panel must
+     * already be enabled as part of its init/reset sequence. */
     bsp_display_backlight_on();
 
     ESP_ERROR_CHECK(bsp_touch_new(NULL, out_touch));
