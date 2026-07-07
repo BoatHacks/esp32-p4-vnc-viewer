@@ -26,7 +26,7 @@ permissions:
 
 env:
   IDF_TARGET: esp32p4
-  IDF_VERSION: v5.3
+  IDF_VERSION: v5.4
   ASSET_NAME: esp32-p4-vnc-viewer.bin
   MERGED_ASSET_NAME: esp32-p4-vnc-viewer-merged.bin
 

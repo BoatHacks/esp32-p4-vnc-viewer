@@ -101,7 +101,7 @@ published. It builds the firmware with the official ESP-IDF Docker image via
 `espressif/esp-idf-ci-action`, and uploads the resulting binary to that
 same release under the exact name `ota_update.c` looks for. Two things
 worth knowing:
-- It targets ESP-IDF `v5.3` (`IDF_VERSION` in the workflow) - bump that
+- It targets ESP-IDF `v5.4` (`IDF_VERSION` in the workflow) - bump that
   alongside any `idf.py add-dependency` changes that need a newer IDF.
 - The v0.1.1 release predates this workflow, so it won't have a binary
   attached. You can backfill it (or rebuild any tag) via the Actions tab
@@ -114,9 +114,13 @@ worth knowing:
 
 ## One-time setup
 
-1. Install ESP-IDF >= 5.3 (this board needs a fairly recent IDF; the Wiki
+1. Install ESP-IDF >= 5.4 (this board needs a fairly recent IDF; the Wiki
    recommends using the VS Code ESP-IDF extension or the command-line
-   installer).
+   installer). **>= 5.4 specifically matters here**: v5.3 hard-caps its
+   supported ESP32-P4 silicon revision at v0.99
+   (`ESP32P4_REV_MAX_FULL`), so a v5.3 build refuses to boot on v1.x
+   chips with `Image requires chip rev <= v0.99, but chip is v1.3` -
+   v5.4 raises that cap to v1.99.
 2. From the project root:
    ```
    idf.py set-target esp32p4

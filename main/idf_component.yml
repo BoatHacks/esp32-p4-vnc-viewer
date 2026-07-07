@@ -1,5 +1,5 @@
 dependencies:
-  idf: ">=5.3"
+  idf: ">=5.4"
 
   # Waveshare's board support package for this exact board: MIPI-DSI panel
   # init (via espressif/esp_lcd_ek79007), touch controller, backlight, I2C bus.
