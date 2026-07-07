@@ -35,6 +35,14 @@ CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+# Real hardware boot crash: `assert failed: sdio_mempool_create sdio_drv.c:255`
+# / "HS_MP: mempool create failed: no mem". esp_hosted's SDIO transport
+# buffer pool defaults to internal DMA-capable RAM, and this project's
+# Wi-Fi/VNC setup UI (LVGL) uses enough of that RAM that the pool can't
+# fit. This tells esp_hosted to try DMA-capable PSRAM first instead -
+# available on the P4 - falling back to internal RAM only if that fails.
+CONFIG_ESP_HOSTED_MEMPOOL_PREFER_SPIRAM=y
+
 # esp_wifi_remote's WIFI_RMT_CACHE_TX_BUFFER_NUM Kconfig option (used by
 # WIFI_INIT_CONFIG_DEFAULT()) only gets a value when this is enabled -
 # without it, that macro fails to expand and main won't compile.
