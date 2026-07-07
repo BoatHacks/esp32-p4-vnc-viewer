@@ -1,10 +1,12 @@
 name: Build and attach firmware
 
-# Runs whenever a release is published (i.e. right after `gh release
-# create`, which is the last step of the "send it!" workflow). Builds the
-# firmware with the official ESP-IDF Docker image and uploads the
-# resulting binary to that same release, named to match what
-# ota_update.c looks for (OTA_ASSET_NAME in main.c).
+# Runs whenever a release is published. Builds the firmware with the
+# official ESP-IDF Docker image and uploads all four binaries a full
+# manual flash needs (bootloader, partition table, ota_data_initial, and
+# the app image) to that same release. The app image is named to match
+# what ota_update.c looks for (OTA_ASSET_NAME in main.c); the other three
+# only matter for a from-scratch flash (see the README's browser-flashing
+# section) - OTA itself only ever needs the app image.
 on:
   release:
     types: [published]
@@ -44,16 +46,21 @@ jobs:
           # resolved one way or another before it can proceed.
           command: idf.py set-target ${{ env.IDF_TARGET }} && idf.py build
 
-      - name: Rename to the asset name OTA looks for
+      - name: Collect release assets
         run: |
-          # build/ also contains bootloader.bin, partition-table.bin,
-          # ota_data_initial.bin etc. - "*.bin" would match all of them.
-          # The app image is named after the CMake project() name.
-          cp build/esp32_p4_vnc_viewer.bin "${ASSET_NAME}"
+          mkdir -p release-assets
+          # The app image is named after the CMake project() name and
+          # gets the fixed OTA asset name; the other three keep their
+          # normal idf.py build names so they're recognizable next to
+          # the offsets documented in the README.
+          cp build/esp32_p4_vnc_viewer.bin "release-assets/${ASSET_NAME}"
+          cp build/bootloader/bootloader.bin release-assets/bootloader.bin
+          cp build/partition_table/partition-table.bin release-assets/partition-table.bin
+          cp build/ota_data_initial.bin release-assets/ota_data_initial.bin
 
-      - name: Attach binary to the release
+      - name: Attach binaries to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${{ github.event.inputs.tag || github.event.release.tag_name }}"
-          gh release upload "$tag" "${ASSET_NAME}" --repo "${{ github.repository }}" --clobber
+          gh release upload "$tag" release-assets/*.bin --repo "${{ github.repository }}" --clobber

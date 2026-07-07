@@ -71,7 +71,7 @@ main/
 ## OTA updates
 
 The device checks `github.com/BoatHacks/esp32-p4-vnc-viewer`'s releases
-(same ones the "send it!" workflow publishes) for a newer version, once
+for a newer version, once
 30s after Wi-Fi comes up and then every 24h (`OTA_CHECK_INTERVAL_HOURS` in
 `main.c`). If the latest release's tag is semver-newer than the running
 firmware's embedded version (see `PROJECT_VER` in `CMakeLists.txt`) and
@@ -97,8 +97,7 @@ normally attached to debug a bricked update from.
 
 **Important - attaching the actual binary**: this is now automated by
 `.github/workflows/build-firmware.yml`, which runs whenever a release is
-published (i.e. right after `gh release create`, the last step of "send
-it!"). It builds the firmware with the official ESP-IDF Docker image via
+published. It builds the firmware with the official ESP-IDF Docker image via
 `espressif/esp-idf-ci-action`, and uploads the resulting binary to that
 same release under the exact name `ota_update.c` looks for. Two things
 worth knowing:
@@ -145,46 +144,53 @@ worth knowing:
 ## Flashing without installing ESP-IDF (browser-based)
 
 For the very first flash - or recovery if a device won't boot - you don't
-need a full ESP-IDF install on the flashing machine. [ESPWebTool](https://esptool.spacehuhn.com/)
+need a full ESP-IDF install on the flashing machine. [ESP Tool](https://www.espboards.dev/tools/program/)
 flashes over USB directly from the browser via the Web Serial API. This
 only replaces `idf.py flash` (the one-time step of writing bootloader +
 partition table + app to a blank board) - normal updates after that go
 over OTA (see above), not through this tool.
 
-1. **Browser**: Chrome or Edge only (Web Serial API isn't supported in
+1. **Browser**: Chrome, Edge, or Opera (Web Serial API isn't supported in
    Firefox or Safari).
-2. **Build first**: you still need the actual `.bin` files, produced by
-   `idf.py build` (or downloaded from a [release](https://github.com/BoatHacks/esp32-p4-vnc-viewer/releases) -
-   grab `esp32-p4-vnc-viewer.bin` and build the other three yourself, or
-   just do a local build so all four are in one place). After `idf.py
-   build` finishes, it prints the exact `esptool` command it would use to
-   flash, including the flash mode/frequency and every file+offset pair -
-   worth double-checking against the addresses below in case a future
-   partition table change shifts anything.
+2. **Get the four `.bin` files**: either build locally with `idf.py
+   build` (they'll be under `build/`), or download all four directly
+   from a [release](https://github.com/BoatHacks/esp32-p4-vnc-viewer/releases) -
+   `.github/workflows/build-firmware.yml` attaches `bootloader.bin`,
+   `partition-table.bin`, `ota_data_initial.bin`, and
+   `esp32-p4-vnc-viewer.bin` to every published release. After `idf.py
+   build` finishes, it also prints the exact `esptool` command it would
+   use to flash, including the flash mode/frequency and every
+   file+offset pair - worth double-checking against the addresses below
+   in case a future partition table change shifts anything.
 3. **Connect**: plug the board's USB-UART port (not the USB-OTG port) into
-   your computer, open esptool.spacehuhn.com, and use its connect button
-   to open a serial port picker. If the board doesn't auto-reset into
-   download mode, put it there manually: hold the **BOOT** button, tap
-   **RESET**, then release **BOOT** (ESP32-P4 enters the serial
-   bootloader when GPIO35 is held low at reset).
-4. **Add each file at its offset** - this project's custom
-   `partitions.csv` and 8MB flash size (see `sdkconfig.defaults`) mean
-   these addresses are specific to this build, not generic ESP32-P4
-   defaults:
+   your computer, open the ESP Tool page, and click **Connect** to pick
+   the serial port. If the board doesn't auto-reset into download mode,
+   put it there manually: hold the **BOOT** button, tap **RESET**, then
+   release **BOOT** (ESP32-P4 enters the serial bootloader when GPIO35 is
+   held low at reset).
+4. Switch to the **Flash firmware** tab and use **Add File** to add each
+   binary at its offset - this project's custom `partitions.csv` and 8MB
+   flash size (see `sdkconfig.defaults`) mean these addresses are
+   specific to this build:
 
-   | File | Offset |
+   | File (from `build/`, or the release asset of the same base name) | Offset |
    |---|---|
-   | `build/bootloader/bootloader.bin` | `0x2000` |
-   | `build/partition_table/partition-table.bin` | `0x8000` |
-   | `build/ota_data_initial.bin` | `0xf000` |
-   | `build/esp32_p4_vnc_viewer.bin` (or the release's `esp32-p4-vnc-viewer.bin`) | `0x20000` |
+   | `bootloader/bootloader.bin` | `0x2000` |
+   | `partition_table/partition-table.bin` | `0x8000` |
+   | `ota_data_initial.bin` | `0xf000` |
+   | `esp32_p4_vnc_viewer.bin` (release asset: `esp32-p4-vnc-viewer.bin`) | `0x20000` |
 
+   Note: ESP Tool's own quick-reference table lists `0x0` for the
+   bootloader on RISC-V chips, which is correct for most of them (C3,
+   C6, H2...) but **not** for the P4 - Espressif's own esptool docs are
+   explicit that the ESP32-P4 bootloader goes at `0x2000`. Use the table
+   above, not the tool's generic one, for this board.
 5. **Flash settings**: mode `dio`, size `8MB` (matches
    `CONFIG_ESPTOOLPY_FLASHSIZE_8MB`) - use whatever frequency `idf.py
    build`'s printed command shows.
-6. Start the flash and wait for it to finish, then reset the board. A
-   serial monitor (ESPWebTool has one built in, or `idf.py monitor`) will
-   show the Wi-Fi/VNC setup dialogs on first boot as described above.
+6. Click **Program** and wait for it to finish, then reset the board. The
+   built-in **Serial monitor** tab (or `idf.py monitor`) will show the
+   Wi-Fi/VNC setup dialogs on first boot as described above.
 
 ## The one part you'll likely need to adjust
 
