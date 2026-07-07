@@ -152,45 +152,50 @@ over OTA (see above), not through this tool.
 
 1. **Browser**: Chrome, Edge, or Opera (Web Serial API isn't supported in
    Firefox or Safari).
-2. **Get the four `.bin` files**: either build locally with `idf.py
-   build` (they'll be under `build/`), or download all four directly
-   from a [release](https://github.com/BoatHacks/esp32-p4-vnc-viewer/releases) -
-   `.github/workflows/build-firmware.yml` attaches `bootloader.bin`,
-   `partition-table.bin`, `ota_data_initial.bin`, and
-   `esp32-p4-vnc-viewer.bin` to every published release. After `idf.py
-   build` finishes, it also prints the exact `esptool` command it would
-   use to flash, including the flash mode/frequency and every
-   file+offset pair - worth double-checking against the addresses below
-   in case a future partition table change shifts anything.
+2. **Get the firmware**: every published release has
+   `esp32-p4-vnc-viewer-merged.bin` - a single file with the bootloader,
+   partition table, ota_data, and app image already combined via `idf.py
+   merge-bin`, flashable in one shot at offset `0x0`. Grab it from a
+   [release](https://github.com/BoatHacks/esp32-p4-vnc-viewer/releases),
+   or build it yourself with `idf.py build && idf.py merge-bin` (output
+   at `build/merged-binary.bin`).
 3. **Connect**: plug the board's USB-UART port (not the USB-OTG port) into
    your computer, open the ESP Tool page, and click **Connect** to pick
    the serial port. If the board doesn't auto-reset into download mode,
    put it there manually: hold the **BOOT** button, tap **RESET**, then
    release **BOOT** (ESP32-P4 enters the serial bootloader when GPIO35 is
    held low at reset).
-4. Switch to the **Flash firmware** tab and use **Add File** to add each
-   binary at its offset - this project's custom `partitions.csv` and 8MB
-   flash size (see `sdkconfig.defaults`) mean these addresses are
-   specific to this build:
-
-   | File (from `build/`, or the release asset of the same base name) | Offset |
-   |---|---|
-   | `bootloader/bootloader.bin` | `0x2000` |
-   | `partition_table/partition-table.bin` | `0x8000` |
-   | `ota_data_initial.bin` | `0xf000` |
-   | `esp32_p4_vnc_viewer.bin` (release asset: `esp32-p4-vnc-viewer.bin`) | `0x20000` |
-
-   Note: ESP Tool's own quick-reference table lists `0x0` for the
-   bootloader on RISC-V chips, which is correct for most of them (C3,
-   C6, H2...) but **not** for the P4 - Espressif's own esptool docs are
-   explicit that the ESP32-P4 bootloader goes at `0x2000`. Use the table
-   above, not the tool's generic one, for this board.
+4. Switch to the **Flash firmware** tab, **Add File**, pick
+   `esp32-p4-vnc-viewer-merged.bin`, and set its offset to `0x0`.
 5. **Flash settings**: mode `dio`, size `8MB` (matches
    `CONFIG_ESPTOOLPY_FLASHSIZE_8MB`) - use whatever frequency `idf.py
    build`'s printed command shows.
 6. Click **Program** and wait for it to finish, then reset the board. The
    built-in **Serial monitor** tab (or `idf.py monitor`) will show the
    Wi-Fi/VNC setup dialogs on first boot as described above.
+
+### Flashing the four binaries separately instead
+
+Every release also has the unmerged `bootloader.bin`,
+`partition-table.bin`, `ota_data_initial.bin`, and
+`esp32-p4-vnc-viewer.bin` (the OTA app image - see above), for anyone who
+wants to inspect, replace, or flash just one of them rather than the
+merged image. If you go this route, add each at its own offset - these
+addresses come from this project's custom `partitions.csv` and 8MB flash
+size, not generic ESP32-P4 defaults:
+
+| File (from `build/`, or the release asset of the same base name) | Offset |
+|---|---|
+| `bootloader/bootloader.bin` | `0x2000` |
+| `partition_table/partition-table.bin` | `0x8000` |
+| `ota_data_initial.bin` | `0xf000` |
+| `esp32_p4_vnc_viewer.bin` (release asset: `esp32-p4-vnc-viewer.bin`) | `0x20000` |
+
+Note: ESP Tool's own quick-reference table lists `0x0` for the bootloader
+on RISC-V chips, which is correct for most of them (C3, C6, H2...) but
+**not** for the P4 - Espressif's own esptool docs are explicit that the
+ESP32-P4 bootloader goes at `0x2000`. Use the table above, not the tool's
+generic one, for this board.
 
 ## The one part you'll likely need to adjust
 

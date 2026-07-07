@@ -1,12 +1,14 @@
 name: Build and attach firmware
 
 # Runs whenever a release is published. Builds the firmware with the
-# official ESP-IDF Docker image and uploads all four binaries a full
-# manual flash needs (bootloader, partition table, ota_data_initial, and
-# the app image) to that same release. The app image is named to match
-# what ota_update.c looks for (OTA_ASSET_NAME in main.c); the other three
-# only matter for a from-scratch flash (see the README's browser-flashing
-# section) - OTA itself only ever needs the app image.
+# official ESP-IDF Docker image and uploads:
+#  - a single merged binary (bootloader + partition table + ota_data +
+#    app, all combined via `idf.py merge-bin`) that flashes at offset
+#    0x0 - the simplest option for a from-scratch flash
+#  - the same four binaries unmerged, for anyone who wants to flash them
+#    individually or inspect/replace just one
+# The app image is separately named to match what ota_update.c looks for
+# (OTA_ASSET_NAME in main.c) - OTA itself only ever needs that one file.
 on:
   release:
     types: [published]
@@ -26,6 +28,7 @@ env:
   IDF_TARGET: esp32p4
   IDF_VERSION: v5.3
   ASSET_NAME: esp32-p4-vnc-viewer.bin
+  MERGED_ASSET_NAME: esp32-p4-vnc-viewer-merged.bin
 
 jobs:
   build:
@@ -44,11 +47,15 @@ jobs:
           # Explicit set-target first: there's no committed sdkconfig (only
           # sdkconfig.defaults), and idf.py build needs the target
           # resolved one way or another before it can proceed.
-          command: idf.py set-target ${{ env.IDF_TARGET }} && idf.py build
+          # merge-bin runs after build and reads the project's actual
+          # partition table/flash settings, so its offsets always match
+          # this build - no hardcoded addresses to keep in sync here.
+          command: idf.py set-target ${{ env.IDF_TARGET }} && idf.py build && idf.py merge-bin
 
       - name: Collect release assets
         run: |
           mkdir -p release-assets
+          cp build/merged-binary.bin "release-assets/${MERGED_ASSET_NAME}"
           # The app image is named after the CMake project() name and
           # gets the fixed OTA asset name; the other three keep their
           # normal idf.py build names so they're recognizable next to
