@@ -39,10 +39,10 @@ jobs:
         with:
           esp_idf_version: ${{ env.IDF_VERSION }}
           target: ${{ env.IDF_TARGET }}
-          # idf_component.yml pulls the Waveshare BSP + esp_wifi_remote +
-          # esp_lvgl_port etc. from the component registry, which needs
-          # network access - the default GitHub-hosted runner has it.
-          command: idf.py build
+          # Explicit set-target first: there's no committed sdkconfig (only
+          # sdkconfig.defaults), and idf.py build needs the target
+          # resolved one way or another before it can proceed.
+          command: idf.py set-target ${{ env.IDF_TARGET }} && idf.py build
 
       - name: Rename to the asset name OTA looks for
         run: |
