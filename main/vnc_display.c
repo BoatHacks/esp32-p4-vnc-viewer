@@ -128,6 +128,13 @@ void vnc_display_set_remote_size(uint16_t width, uint16_t height)
 /* --- touch -> PointerEvent task -------------------------------------------- */
 
 static rfb_client_t *s_touch_client;
+static volatile bool s_touch_paused;
+static bool s_touch_task_started;
+
+void vnc_display_pause_touch(bool paused)
+{
+    s_touch_paused = paused;
+}
 
 static void touch_task(void *arg)
 {
@@ -136,6 +143,12 @@ static void touch_task(void *arg)
     uint16_t last_rx = 0, last_ry = 0;
 
     while (1) {
+        if (s_touch_paused) {
+            was_pressed = false; /* don't send a stale release once resumed */
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
         uint16_t tx[1], ty[1];
         uint8_t tcnt = 0;
 
@@ -163,12 +176,16 @@ static void touch_task(void *arg)
 
 esp_err_t vnc_display_start_touch_task(rfb_client_t *client)
 {
+    s_touch_client = client; /* update in case rfb_client_t* changed across a reconnect */
+
+    if (s_touch_task_started) return ESP_OK;
+
     if (!s.touch) {
         ESP_LOGE(TAG, "No touch handle configured (vnc_display_init cfg->touch was NULL) - skipping touch task");
         return ESP_ERR_INVALID_STATE;
     }
-    s_touch_client = client;
 
     BaseType_t ok = xTaskCreate(touch_task, "vnc_touch", 4096, NULL, 5, NULL);
+    if (ok == pdPASS) s_touch_task_started = true;
     return ok == pdPASS ? ESP_OK : ESP_FAIL;
 }

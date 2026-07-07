@@ -24,8 +24,15 @@ esp_err_t vnc_display_init(const vnc_display_cfg_t *cfg, rfb_callbacks_t *out_ca
 
 /* Starts a task that polls the touch controller and forwards taps/drags to
  * `client` as RFB PointerEvents, scaled from panel coordinates into the
- * remote desktop's coordinate space (set once on_connected fires). */
+ * remote desktop's coordinate space (set once on_connected fires). Safe
+ * to call more than once (e.g. after a reconnect) - only the first call
+ * actually spawns the task. */
 esp_err_t vnc_display_start_touch_task(rfb_client_t *client);
+
+/* Pauses (true) or resumes (false) touch polling. Call this around any
+ * time another consumer (like the LVGL-based Wi-Fi setup screen) needs
+ * exclusive use of the touch controller. */
+void vnc_display_pause_touch(bool paused);
 
 /* Called from your on_connected callback (or after it) once you know the
  * remote desktop's real resolution, so touch coordinates can be scaled

@@ -1,7 +1,9 @@
 idf_component_register(
     SRCS
         "main.c"
-        "wifi_connect.c"
+        "wifi_creds.c"
+        "wifi_manager.c"
+        "wifi_setup_ui.c"
         "rfb_client.c"
         "vnc_display.c"
     INCLUDE_DIRS "."
@@ -14,4 +16,6 @@ idf_component_register(
         mbedtls
         lwip
         driver
+        esp_lvgl_port
+        lvgl
 )

@@ -16,3 +16,12 @@ dependencies:
   # it resolves to - the Wiki's own instructions are the source of truth:
   #   idf.py add-dependency "espressif/esp_wifi_remote"
   #   idf.py add-dependency "espressif/esp_hosted"
+
+  # Wraps our already-initialized panel/touch handles in LVGL for the
+  # Wi-Fi setup screens. Deliberately used instead of the BSP's own
+  # bsp_display_start() so the LVGL wiring doesn't depend on guessing this
+  # BSP release's internal API - esp_lvgl_port's "bring your own handles"
+  # surface (lvgl_port_add_disp/lvgl_port_add_touch) is stable across
+  # Espressif's BSP ecosystem.
+  espressif/esp_lvgl_port: "*"
+  lvgl/lvgl: "*"

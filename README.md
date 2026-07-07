@@ -8,15 +8,38 @@ connects to a VNC server over Wi-Fi, renders framebuffer updates to the
 
 ```
 main/
-  rfb_client.c/.h    RFB protocol engine (handshake, VNC auth, Raw + CopyRect
-                     encodings, pointer/key events). No display code - pure
-                     sockets + protocol state machine.
-  vnc_display.c/.h   Owns a PSRAM shadow framebuffer, blits updates to the
-                     panel, polls touch and forwards events to rfb_client.
-  wifi_connect.c/.h  Standard Wi-Fi station bring-up.
-  main.c             Wires BSP display/touch init + Wi-Fi + the VNC client
-                     together. Fill in your Wi-Fi/VNC server details here.
+  rfb_client.c/.h     RFB protocol engine (handshake, VNC auth, Raw + CopyRect
+                      encodings, pointer/key events). No display code - pure
+                      sockets + protocol state machine.
+  vnc_display.c/.h    Owns a PSRAM shadow framebuffer, blits updates to the
+                      panel, polls touch and forwards events to rfb_client.
+  wifi_manager.c/.h   Wi-Fi station bring-up: connect with bounded retries,
+                      scan, and detect when a previously-working connection
+                      is lost (vs. just failing on the very first attempt).
+  wifi_creds.c/.h     NVS-backed storage for the last-used SSID/password.
+  wifi_setup_ui.c/.h  LVGL dialog: scan list -> tap a network -> on-screen
+                      keyboard for the password -> connect. Shown on first
+                      boot (nothing saved yet) and again any time the saved
+                      network stops working.
+  main.c              Wires BSP display/touch init + Wi-Fi + the VNC client
+                      together. Fill in your VNC server details here.
 ```
+
+## Wi-Fi setup flow
+
+- **First boot** (nothing saved yet): the setup dialog appears immediately.
+- **Saved network fails to connect** (wrong password changed, AP gone,
+  etc.) at startup: same dialog, after a bounded 15s connection attempt.
+- **A working connection is lost later** (router reboot, moved out of
+  range, and automatic retries give up): the running VNC session pauses,
+  the same dialog reappears over it, and once you pick a network and it
+  connects, VNC reconnects automatically and the dialog is dismissed.
+- Whatever you pick that works is saved to NVS (`wifi_cfg` namespace,
+  keys `ssid`/`pass`) and becomes the new "saved network" for next boot.
+  There's currently no on-device "forget this network" option; the
+  quickest way to clear it is `idf.py erase-flash` (which also wipes
+  everything else in NVS) or adding a small `wifi_creds_clear()` call
+  behind a long-press gesture if you want something less blunt.
 
 ## One-time setup
 
@@ -29,6 +52,8 @@ main/
    idf.py add-dependency "waveshare/esp32_p4_wifi6_touch_lcd_7b"
    idf.py add-dependency "espressif/esp_wifi_remote"
    idf.py add-dependency "espressif/esp_hosted"
+   idf.py add-dependency "espressif/esp_lvgl_port"
+   idf.py add-dependency "lvgl/lvgl"
    ```
    (These are already listed in `main/idf_component.yml`; running
    `add-dependency` just pulls them down and confirms the exact versions
@@ -39,9 +64,10 @@ main/
    - **Component config -> Wi-Fi Remote**: set slave target to `esp32-c6`
      (this is what lets `esp_wifi_*` calls transparently reach the onboard
      ESP32-C6 over SDIO).
-4. Edit `main/main.c`: set `WIFI_SSID`, `WIFI_PASSWORD`, `VNC_HOST`,
-   `VNC_PORT`, and `VNC_PASSWORD` (leave the password empty if your VNC
-   server allows Security-Type "None").
+4. Edit `main/main.c`: set `VNC_HOST`, `VNC_PORT`, and `VNC_PASSWORD` (leave
+   the password empty if your VNC server allows Security-Type "None").
+   Wi-Fi credentials are *not* hardcoded here - they're entered on-device
+   via the setup dialog on first boot and saved to NVS from then on.
 5. `idf.py build flash monitor`.
 
 ## The one part you'll likely need to adjust
@@ -58,9 +84,14 @@ managed_components/waveshare__esp32_p4_wifi6_touch_lcd_7b/include/bsp/esp-bsp.h
 
 and check `bsp_display_new()`'s and `bsp_touch_new()`'s real parameter types
 against what `main.c` passes. Everything else in the project
-(`rfb_client.c`, `vnc_display.c`, `wifi_connect.c`) only depends on stable,
-version-independent ESP-IDF APIs (`esp_lcd_panel_*`, `esp_lcd_touch_*`,
-`esp_wifi_*`, BSD sockets), so it shouldn't need touching.
+(`rfb_client.c`, `vnc_display.c`, `wifi_manager.c`, `wifi_setup_ui.c`) only
+depends on stable, version-independent APIs (`esp_lcd_panel_*`,
+`esp_lcd_touch_*`, `esp_wifi_*`, `esp_lvgl_port`, BSD sockets), so it
+shouldn't need touching. In particular, the LVGL wiring for the Wi-Fi
+setup screens deliberately goes through `esp_lvgl_port`'s
+`lvgl_port_add_disp()`/`lvgl_port_add_touch()` instead of the BSP's own
+`bsp_display_start()`, specifically to sidestep needing to guess that
+function's internals.
 
 ## Design notes
 

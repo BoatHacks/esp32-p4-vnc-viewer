@@ -22,3 +22,7 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # The exact Kconfig symbols are added by those components once you've
 # run `idf.py add-dependency`; set the slave target to esp32-c6 via
 # `idf.py menuconfig` -> Component config -> Wi-Fi Remote.
+
+# The Wi-Fi setup UI's titles use Montserrat 24 - LVGL only ships 14 by
+# default.
+CONFIG_LV_FONT_MONTSERRAT_24=y
