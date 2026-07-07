@@ -1,8 +1,10 @@
-# This board's flash is 32MB (ESP32-P4-Core + 32MB Nor Flash per
-# Waveshare's specs). Nothing declares this by default, so a fresh build
-# falls back to a 2MB assumption - nowhere near enough for the OTA
-# partition table in partitions.csv (ota_0 + ota_1 alone are 8MB).
-CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+# This board actually has 32MB of flash, but CONFIG_ESPTOOLPY_FLASHSIZE_32MB
+# turned out not to be a valid choice for this target/IDF version - it was
+# silently ignored rather than erroring, leaving the default at 2MB. 8MB is
+# a flash size choice that's reliably supported everywhere, and comfortably
+# fits partitions.csv's layout (~6MB used) with room to spare; it just means
+# the remaining ~24MB on this particular board goes unused.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 
 # OTA needs two app slots (ota_0/ota_1) plus an otadata partition - the
 # default single-app partition table doesn't have room for that.

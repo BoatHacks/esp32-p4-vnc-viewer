@@ -79,11 +79,14 @@ has a release asset literally named `esp32-p4-vnc-viewer.bin`, it
 downloads and flashes it via `esp_https_ota`, then reboots.
 
 **This needs an OTA-aware partition table**, which `partitions.csv`
-provides (`ota_0`/`ota_1` app slots + `otadata`, sized 4MB each for this
-board's 32MB flash - see `sdkconfig.defaults` for the
-`CONFIG_PARTITION_TABLE_CUSTOM` wiring). If you already have a different
-partition layout, OTA needs at least two `app` partitions and one `data,
-ota` partition; adjust sizes to fit your image rather than removing them.
+provides (`ota_0`/`ota_1` app slots + `otadata`, sized 3MB each - see
+`sdkconfig.defaults` for the `CONFIG_PARTITION_TABLE_CUSTOM` wiring and
+the `CONFIG_ESPTOOLPY_FLASHSIZE_8MB` setting these fit under). If you
+already have a different partition layout, OTA needs at least two `app`
+partitions and one `data, ota` partition; adjust sizes to fit your image
+rather than removing them. Note this board actually has 32MB of flash,
+but declaring only 8MB is harmless - it's just an upper bound the
+partition table has to fit inside, not the real capacity in use.
 
 **Rollback safety**: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` is on, and
 `main.c` calls `ota_mark_running_app_valid()` once Wi-Fi comes up
