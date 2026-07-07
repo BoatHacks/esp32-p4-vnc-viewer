@@ -18,6 +18,13 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # no physical keyboard to debug it from.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
+# DES is disabled by default in mbedtls (default n - it's a legacy,
+# insecure cipher) but rfb_client.c genuinely needs it: classic VNC
+# authentication (RFB security type 2) is specified as DES challenge-
+# response, and that's inherent to the VNC protocol, not something we
+# can avoid while still supporting VNC Auth.
+CONFIG_MBEDTLS_DES_C=y
+
 # Target
 CONFIG_IDF_TARGET="esp32p4"
 
