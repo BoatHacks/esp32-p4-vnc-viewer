@@ -30,6 +30,11 @@ main/
                       connection failures.
   main.c              Wires BSP display/touch init + Wi-Fi + the VNC client
                       together.
+  ota_update.c/.h     Checks this repo's GitHub Releases for a newer
+                      version and flashes it via esp_https_ota.
+.github/workflows/
+  build-firmware.yml  Builds the firmware on every published release and
+                      attaches the binary OTA looks for.
 ```
 
 ## Wi-Fi setup flow
@@ -62,6 +67,48 @@ main/
 - Unlike the Wi-Fi dialog, there's no separate "connection lost" watchdog
   here - `vnc_task` in `main.c` already polls the connection directly, so
   repeated failures are just counted in that same loop.
+
+## OTA updates
+
+The device checks `github.com/BoatHacks/esp32-p4-vnc-viewer`'s releases
+(same ones the "send it!" workflow publishes) for a newer version, once
+30s after Wi-Fi comes up and then every 24h (`OTA_CHECK_INTERVAL_HOURS` in
+`main.c`). If the latest release's tag is semver-newer than the running
+firmware's embedded version (see `PROJECT_VER` in `CMakeLists.txt`) and
+has a release asset literally named `esp32-p4-vnc-viewer.bin`, it
+downloads and flashes it via `esp_https_ota`, then reboots.
+
+**This needs an OTA-aware partition table**, which `partitions.csv`
+provides (`ota_0`/`ota_1` app slots + `otadata`, sized 4MB each for this
+board's 32MB flash - see `sdkconfig.defaults` for the
+`CONFIG_PARTITION_TABLE_CUSTOM` wiring). If you already have a different
+partition layout, OTA needs at least two `app` partitions and one `data,
+ota` partition; adjust sizes to fit your image rather than removing them.
+
+**Rollback safety**: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` is on, and
+`main.c` calls `ota_mark_running_app_valid()` once Wi-Fi comes up
+successfully after boot. If a bad OTA image can't even get that far, the
+bootloader automatically reverts to the previous working image on the
+next reset - important on a device with no keyboard or serial console
+normally attached to debug a bricked update from.
+
+**Important - attaching the actual binary**: this is now automated by
+`.github/workflows/build-firmware.yml`, which runs whenever a release is
+published (i.e. right after `gh release create`, the last step of "send
+it!"). It builds the firmware with the official ESP-IDF Docker image via
+`espressif/esp-idf-ci-action`, and uploads the resulting binary to that
+same release under the exact name `ota_update.c` looks for. Two things
+worth knowing:
+- It targets ESP-IDF `v5.3` (`IDF_VERSION` in the workflow) - bump that
+  alongside any `idf.py add-dependency` changes that need a newer IDF.
+- The v0.1.1 release predates this workflow, so it won't have a binary
+  attached. You can backfill it (or rebuild any tag) via the Actions tab
+  -> "Build and attach firmware" -> "Run workflow", entering the tag
+  name - or manually, same as before:
+  ```
+  idf.py build
+  gh release upload v0.1.1 build/esp32_p4_vnc_viewer.bin#esp32-p4-vnc-viewer.bin
+  ```
 
 ## One-time setup
 

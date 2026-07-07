@@ -8,6 +8,7 @@ idf_component_register(
         "vnc_setup_ui.c"
         "rfb_client.c"
         "vnc_display.c"
+        "ota_update.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
@@ -20,4 +21,9 @@ idf_component_register(
         driver
         esp_lvgl_port
         lvgl
+        app_update
+        esp_https_ota
+        esp_http_client
+        esp-tls
+        json
 )

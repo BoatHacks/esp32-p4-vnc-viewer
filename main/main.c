@@ -10,6 +10,7 @@
 #include "vnc_setup_ui.h"
 #include "rfb_client.h"
 #include "vnc_display.h"
+#include "ota_update.h"
 
 #include "esp_lvgl_port.h"
 
@@ -49,6 +50,13 @@ static const char *TAG = "vnc_main";
 #define SAVED_WIFI_CONNECT_TIMEOUT_MS   15000
 #define SAVED_VNC_CONNECT_TIMEOUT_MS    8000
 #define VNC_MAX_CONSECUTIVE_FAILURES    3   /* before re-showing the setup dialog */
+
+/* OTA updates are sourced from this project's own GitHub Releases - see
+ * ota_update.h for the required release-asset naming convention. */
+#define OTA_REPO_OWNER      "BoatHacks"
+#define OTA_REPO_NAME       "esp32-p4-vnc-viewer"
+#define OTA_ASSET_NAME      "esp32-p4-vnc-viewer.bin"
+#define OTA_CHECK_INTERVAL_HOURS  24
 
 static esp_err_t board_display_touch_init(esp_lcd_panel_handle_t *out_panel,
                                            esp_lcd_panel_io_handle_t *out_io,
@@ -236,6 +244,12 @@ void app_main(void)
      * setup dialog if needed) until Wi-Fi is actually up. */
     ensure_wifi_connected();
     lvgl_yield_to_vnc();
+
+    /* We have working Wi-Fi at minimum, which is a reasonable bar for
+     * "this OTA image isn't bricked" - cancel any pending rollback now
+     * rather than waiting indefinitely (see ota_update.h). */
+    ota_mark_running_app_valid();
+    ota_start_periodic_check(OTA_REPO_OWNER, OTA_REPO_NAME, OTA_ASSET_NAME, OTA_CHECK_INTERVAL_HOURS);
 
     vnc_display_cfg_t disp_cfg = {
         .panel = panel,

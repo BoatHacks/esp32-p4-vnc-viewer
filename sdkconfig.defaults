@@ -1,3 +1,15 @@
+# OTA needs two app slots (ota_0/ota_1) plus an otadata partition - the
+# default single-app partition table doesn't have room for that.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# If a freshly-flashed OTA image never confirms itself as good (see
+# ota_update.c's ota_mark_running_app_valid()), the bootloader
+# automatically rolls back to the previous working image on the next
+# boot - much better than a bad update silently bricking a device with
+# no physical keyboard to debug it from.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
 # Target
 CONFIG_IDF_TARGET="esp32p4"
 
