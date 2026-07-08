@@ -11,6 +11,7 @@
 #include "rfb_client.h"
 #include "vnc_display.h"
 #include "ota_update.h"
+#include "serial_cli.h"
 
 #include "esp_lvgl_port.h"
 
@@ -300,4 +301,12 @@ void app_main(void)
     wifi_manager_set_lost_callback(wifi_lost_cb, NULL);
 
     xTaskCreate(vnc_task, "vnc_task", 8192, client, 5, NULL);
+
+    const serial_cli_cfg_t cli_cfg = {
+        .ota_owner = OTA_REPO_OWNER,
+        .ota_repo = OTA_REPO_NAME,
+        .ota_asset_name = OTA_ASSET_NAME,
+        .vnc_client = client,
+    };
+    serial_cli_start(&cli_cfg);
 }

@@ -32,6 +32,8 @@ main/
                       together.
   ota_update.c/.h     Checks this repo's GitHub Releases for a newer
                       version and flashes it via esp_https_ota.
+  serial_cli.c/.h     REPL over the console UART: set Wi-Fi/VNC config,
+                      trigger an OTA check, or reboot from a terminal.
 .github/workflows/
   build-firmware.yml  Builds the firmware on every published release and
                       attaches the binary OTA looks for.
@@ -111,6 +113,25 @@ worth knowing:
   idf.py build
   gh release upload v0.1.1 build/esp32_p4_vnc_viewer.bin#esp32-p4-vnc-viewer.bin
   ```
+
+## Serial CLI
+
+A small REPL is available over the same console UART that carries
+`ESP_LOG` output - open a serial terminal (`idf.py monitor`, ESP Tool's
+built-in serial monitor, or any terminal program) and you'll get an
+`esp32-p4-vnc>` prompt alongside the regular log lines. Commands:
+
+| Command | Effect |
+|---|---|
+| `wifi <ssid> <password>` | Connects to a Wi-Fi network and saves it as the default (same effect as the on-screen setup dialog) |
+| `vnc <host> <port> [username] [password]` | Saves the VNC server to use, and immediately drops any active session so `vnc_task` reconnects with the new settings |
+| `ota` | Checks for and installs an update right now, instead of waiting for the periodic 24h check |
+| `reboot` | Restarts the device |
+| `help` | Lists all registered commands (built into `esp_console`) |
+
+This is handy for headless setup (no touchscreen interaction needed) or
+scripting - e.g. provisioning a batch of devices by piping commands over
+serial rather than tapping through the on-screen dialogs on each one.
 
 ## One-time setup
 

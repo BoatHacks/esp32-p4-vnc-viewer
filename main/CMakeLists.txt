@@ -9,6 +9,7 @@ idf_component_register(
         "rfb_client.c"
         "vnc_display.c"
         "ota_update.c"
+        "serial_cli.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
@@ -26,4 +27,5 @@ idf_component_register(
         esp_http_client
         esp-tls
         json
+        console
 )
