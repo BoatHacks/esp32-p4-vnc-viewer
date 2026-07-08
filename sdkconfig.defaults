@@ -31,7 +31,20 @@ CONFIG_IDF_TARGET="esp32p4"
 # The RFB framebuffer (1024*600*2 bytes ~= 1.2MB) and the LVGL-free
 # double-copy path both want PSRAM, not internal SRAM.
 CONFIG_SPIRAM=y
-CONFIG_SPIRAM_MODE_OCT=y
+# Real hardware showed PSRAM running at only 20MHz despite
+# CONFIG_SPIRAM_SPEED_200M below, causing continuous MIPI-DSI DPI
+# underrun errors ("can't fetch data from external memory fast enough") -
+# the display simply couldn't be fed fast enough. Root cause, verified
+# against the real esp-idf Kconfig (components/esp_psram/esp32p4/
+# Kconfig.spiram) and Espressif's own MIPI-DSI example sdkconfig:
+#  - CONFIG_SPIRAM_SPEED_200M silently depends on
+#    CONFIG_IDF_EXPERIMENTAL_FEATURES, which we never enabled, so it was
+#    ignored and fell back to the Kconfig's own default (20MHz).
+#  - CONFIG_SPIRAM_MODE_OCT doesn't exist as an option for the P4 at all
+#    (only SPIRAM_MODE_HEX, matching the "hex_psram" driver tag this
+#    board's own boot log prints) - harmless no-op, but wrong/confusing.
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+CONFIG_SPIRAM_MODE_HEX=y
 CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384

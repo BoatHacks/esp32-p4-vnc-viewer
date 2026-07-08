@@ -18,6 +18,7 @@ static EventGroupHandle_t s_event_group;
 static int s_retry_count;
 static bool s_ever_connected;   /* have we successfully connected at least once? */
 static bool s_attempting;       /* is a connect() call currently in flight?      */
+static bool s_have_config;      /* has esp_wifi_set_config() been called with a real SSID? */
 
 static wifi_manager_lost_cb_t s_lost_cb;
 static void *s_lost_cb_ctx;
@@ -25,7 +26,14 @@ static void *s_lost_cb_ctx;
 static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
+        /* Real hardware log: this used to unconditionally call
+         * esp_wifi_connect() here, including on first boot before any
+         * SSID was ever configured - that produced a connect attempt
+         * with an empty SSID racing against the setup UI's own scan,
+         * surfacing as "esp_wifi_scan_start failed: ESP_ERR_WIFI_STATE"
+         * and a pointless "disconnected, retrying" cycle. Only auto-
+         * connect once we actually have real credentials configured. */
+        if (s_have_config) esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(s_event_group, CONNECTED_BIT);
 
@@ -88,6 +96,7 @@ static esp_err_t connect_and_wait(const char *ssid, const char *password, uint32
 
     esp_wifi_disconnect(); /* no-op if not currently connected */
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    s_have_config = true;
     esp_err_t connect_err = esp_wifi_connect();
     if (connect_err != ESP_OK && connect_err != ESP_ERR_WIFI_CONN) {
         s_attempting = false;
