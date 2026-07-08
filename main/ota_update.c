@@ -53,6 +53,7 @@ static esp_err_t http_get_json(const char *url, char **out_json)
         .event_handler = http_event_handler,
         .user_data = &rb,
         .timeout_ms = 10000,
+        .buffer_size = 2048, /* GitHub's API responses carry a fair number of headers (rate-limit info, Link, etc.) */
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     /* GitHub's API rejects requests with no User-Agent, and returns a
@@ -155,11 +156,18 @@ esp_err_t ota_check_and_update(const char *owner, const char *repo, const char *
     }
 
     ESP_LOGI(TAG, "Downloading and flashing %s", download_url);
+    /* GitHub's release download URL (github.com/.../releases/download/...)
+     * 302-redirects to the actual asset host with a long signed URL in
+     * the Location header - esp_http_client's default header buffer
+     * (a few hundred bytes) isn't big enough to hold it, which is what
+     * caused a real "HTTP_CLIENT: Out of buffer" failure here. */
     esp_http_client_config_t http_cfg = {
         .url = download_url,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .timeout_ms = 20000,
         .keep_alive_enable = true,
+        .buffer_size = 4096,
+        .buffer_size_tx = 1024,
     };
     esp_https_ota_config_t ota_cfg = {
         .http_config = &http_cfg,
