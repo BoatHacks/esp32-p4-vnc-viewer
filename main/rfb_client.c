@@ -309,6 +309,21 @@ static esp_err_t negotiate_vencrypt(rfb_client_t *c, const char *username, const
     if (write_full(c, chosen, 4) != ESP_OK) return ESP_FAIL;
 
     if (chosen_subtype == VENCRYPT_SUBTYPE_X509_PLAIN) {
+        /* One easy-to-miss step: after choosing a TLS-wrapped subtype,
+         * the server sends a single byte confirming it initialized TLS
+         * on its side OK (0 = failure) - BEFORE the actual TLS handshake
+         * starts. Skipping this (as an earlier version of this function
+         * did) leaves that stray byte sitting in the stream, which
+         * mbedtls then misreads as the start of a TLS record, failing
+         * with "invalid SSL record". Confirmed against TigerVNC's
+         * reference client (CSecurityTLS::processMsg()). */
+        uint8_t tls_init_ok;
+        if (read_full(c, &tls_init_ok, 1) != ESP_OK) return ESP_FAIL;
+        if (tls_init_ok == 0) {
+            ESP_LOGE(TAG, "Server failed to initialize TLS for VeNCrypt X509Plain");
+            return ESP_FAIL;
+        }
+
         esp_err_t tls_err = start_tls(c);
         if (tls_err != ESP_OK) return tls_err;
         /* From here on, write_full()/read_full() transparently go
