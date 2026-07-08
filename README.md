@@ -243,13 +243,19 @@ function's internals.
   are where you'd add scaling (or panning/scrolling) if you want the whole
   remote desktop visible.
 - **Auth**: supports Security-Type None, classic VNC (DES challenge-
-  response, password only), and VeNCrypt's "Plain" subtype (username +
-  password, cleartext - despite the name, no TLS involved), matching RFB
-  protocol versions 3.3/3.7/3.8. When a server offers more than one, None
-  is preferred, then VeNCrypt, then classic VNC Auth. TLS-wrapped
-  VeNCrypt subtypes (X509Plain etc.) aren't implemented - if your server
-  only offers those, you'll need mbedtls TLS wrapped around the socket in
-  `rfb_client_connect()`/`negotiate_vencrypt()`.
+  response, password only), and two VeNCrypt subtypes - "Plain"
+  (username + password, cleartext) and "X509Plain" (same, but wrapped in
+  a TLS session first via mbedtls) - matching RFB protocol versions
+  3.3/3.7/3.8. When a server offers more than one, None is preferred,
+  then VeNCrypt, then classic VNC Auth. For X509Plain, certificate
+  validation is deliberately skipped (`MBEDTLS_SSL_VERIFY_NONE`) since
+  these are almost always self-signed on a private network - if that's
+  not an acceptable tradeoff for your setup, that's the line to change in
+  `start_tls()`. Other VeNCrypt subtypes (TLSNone/TLSPlain/X509None/
+  \*SASL) aren't implemented; `negotiate_vencrypt()` logs which subtype(s)
+  a server actually offers if none of the supported ones match, so
+  extending it is a matter of following that same TLS-then-Plain-auth
+  pattern for whichever one you need.
 - **Framebuffer memory**: the shadow copy lives in PSRAM
   (`MALLOC_CAP_SPIRAM`), sized to the panel's resolution
   (1024*600*2 bytes ~= 1.2 MB) - comfortably inside this board's PSRAM.

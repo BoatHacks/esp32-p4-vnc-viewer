@@ -59,12 +59,14 @@ void rfb_client_destroy(rfb_client_t *client);
  * an unreachable/wrong host fails fast instead of hanging - and each
  * individual handshake read/write).
  *
- * Supports three security types, tried in this order if the server
- * offers more than one: None (no auth), VeNCrypt "Plain" subtype
- * (username + password, RFC-less but widely implemented by TigerVNC,
- * RealVNC, etc. - no TLS involved despite the name), and classic VNC
- * Authentication (password only, DES challenge-response - no username
- * concept exists in this one, so `username` is ignored for it).
+ * Supports four security types, tried in this order if the server
+ * offers more than one: None (no auth), VeNCrypt "Plain" or "X509Plain"
+ * subtypes (username + password; X509Plain wraps the rest of the
+ * connection in TLS first - certificate validation is deliberately
+ * skipped, since these are almost always self-signed on private
+ * networks), and classic VNC Authentication (password only, DES
+ * challenge-response - no username concept exists in this one, so
+ * `username` is ignored for it).
  *
  * `username` may be NULL/empty if the server doesn't require one (it's
  * simply not sent for security types that don't use it). `password` may
