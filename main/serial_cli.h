@@ -35,6 +35,11 @@ typedef struct {
  * is started, it doesn't block. */
 esp_err_t serial_cli_start(const serial_cli_cfg_t *cfg);
 
+/* Updates the vnc_client the `vnc` command operates on. Needed because
+ * serial_cli_start() runs before the RFB client exists yet (as early in
+ * boot as possible), while the client itself is only created later. */
+void serial_cli_set_vnc_client(rfb_client_t *client);
+
 #ifdef __cplusplus
 }
 #endif

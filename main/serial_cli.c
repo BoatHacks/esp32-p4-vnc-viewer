@@ -93,6 +93,11 @@ static int cmd_reboot(int argc, char **argv)
     return 0; /* unreachable */
 }
 
+void serial_cli_set_vnc_client(rfb_client_t *client)
+{
+    s_cfg.vnc_client = client;
+}
+
 esp_err_t serial_cli_start(const serial_cli_cfg_t *cfg)
 {
     s_cfg = *cfg;

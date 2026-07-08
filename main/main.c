@@ -262,6 +262,20 @@ void app_main(void)
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(wifi_manager_init());
 
+    /* Started this early (before display/Wi-Fi setup, which can block
+     * for a while on first boot) so the CLI is usable immediately -
+     * it previously only started at the very end of app_main, which
+     * meant no serial access at all until Wi-Fi was already connected.
+     * vnc_client is filled in later via serial_cli_set_vnc_client() once
+     * the RFB client actually exists. */
+    const serial_cli_cfg_t cli_cfg = {
+        .ota_owner = OTA_REPO_OWNER,
+        .ota_repo = OTA_REPO_NAME,
+        .ota_asset_name = OTA_ASSET_NAME,
+        .vnc_client = NULL,
+    };
+    serial_cli_start(&cli_cfg);
+
     esp_lcd_panel_handle_t panel = NULL;
     esp_lcd_panel_io_handle_t io = NULL;
     esp_lcd_touch_handle_t touch = NULL;
@@ -302,11 +316,5 @@ void app_main(void)
 
     xTaskCreate(vnc_task, "vnc_task", 8192, client, 5, NULL);
 
-    const serial_cli_cfg_t cli_cfg = {
-        .ota_owner = OTA_REPO_OWNER,
-        .ota_repo = OTA_REPO_NAME,
-        .ota_asset_name = OTA_ASSET_NAME,
-        .vnc_client = client,
-    };
-    serial_cli_start(&cli_cfg);
+    serial_cli_set_vnc_client(client);
 }
