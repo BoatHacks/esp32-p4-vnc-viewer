@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -164,7 +165,25 @@ static esp_err_t negotiate_vencrypt(rfb_client_t *c, const char *username, const
 
     bool have_plain = false;
     for (int i = 0; i < n; i++) {
-        if (rd_u32(subtypes_raw + i * 4) == VENCRYPT_SUBTYPE_PLAIN) have_plain = true;
+        uint32_t st = rd_u32(subtypes_raw + i * 4);
+        if (st == VENCRYPT_SUBTYPE_PLAIN) have_plain = true;
+        /* Standard VeNCrypt subtype IDs (256-264); logged by number with
+         * a name where recognized, so a real-world "not supported" case
+         * tells us exactly what to implement next instead of just "no". */
+        const char *name = "unknown";
+        switch (st) {
+            case 256: name = "Plain"; break;
+            case 257: name = "TLSNone"; break;
+            case 258: name = "TLSVnc"; break;
+            case 259: name = "TLSPlain"; break;
+            case 260: name = "X509None"; break;
+            case 261: name = "X509Vnc"; break;
+            case 262: name = "X509Plain"; break;
+            case 263: name = "TLSSASL"; break;
+            case 264: name = "X509SASL"; break;
+            default: break;
+        }
+        ESP_LOGI(TAG, "Server offers VeNCrypt subtype %" PRIu32 " (%s)", st, name);
     }
     if (!have_plain) {
         ESP_LOGE(TAG, "Server's VeNCrypt subtypes don't include Plain (256) - "
