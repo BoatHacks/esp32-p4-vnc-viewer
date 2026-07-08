@@ -104,6 +104,15 @@ static esp_err_t lvgl_init_for_panel(esp_lcd_panel_handle_t panel, esp_lcd_panel
             .buff_dma = false,
             .buff_spiram = true,
             .swap_bytes = false,
+            /* Real hardware log: esp_lcd_panel_swap_xy() logs "not
+             * supported by this panel" (harmless - just noisy) because
+             * lvgl_port unconditionally calls it even with swap_xy=false
+             * whenever LV_DISPLAY_ROTATION_0 is active, and this
+             * MIPI-DSI panel driver doesn't implement it. Setting
+             * sw_rotate skips that whole hardware-rotation codepath;
+             * since we never actually rotate anything, there's no
+             * downside. */
+            .sw_rotate = true,
         },
     };
     /* Real hardware crash (Instruction access fault, MEPC=0x0) using the
