@@ -38,9 +38,10 @@ enum {
     ENC_COPY_RECT = 1,
 };
 enum {
-    SEC_TYPE_INVALID = 0,
-    SEC_TYPE_NONE    = 1,
-    SEC_TYPE_VNCAUTH = 2,
+    SEC_TYPE_INVALID  = 0,
+    SEC_TYPE_NONE     = 1,
+    SEC_TYPE_VNCAUTH  = 2,
+    SEC_TYPE_VENCRYPT = 19,
 };
 
 struct rfb_client {
@@ -126,9 +127,73 @@ static void vnc_auth_response(const char *password, const uint8_t challenge[16],
     mbedtls_des_free(&des);
 }
 
+/* --- VeNCrypt "Plain" authentication (username + password, no TLS) -------
+ * VeNCrypt (security type 19) is a small sub-negotiation: version
+ * handshake, then the server offers a list of "subtype" auth methods
+ * (u32 IDs). Subtype 256 ("Plain") is the one that actually wants a
+ * username - it just sends u32 length + bytes for each of username and
+ * password in cleartext. Despite the name, VeNCrypt also has TLS-wrapped
+ * subtypes (X509Plain etc.) - those aren't implemented here; only the
+ * plain, unencrypted subtype 256, since that's what's actually needed to
+ * cover username-requiring servers without pulling in a TLS handshake. */
+#define VENCRYPT_SUBTYPE_PLAIN 256
+
+static esp_err_t negotiate_vencrypt(rfb_client_t *c, const char *username, const char *password)
+{
+    uint8_t server_ver[2];
+    if (read_full(c->sock, server_ver, 2) != ESP_OK) return ESP_FAIL;
+
+    uint8_t our_ver[2] = {0, 2}; /* VeNCrypt 0.2 - the version almost every server supports */
+    if (write_full(c->sock, our_ver, 2) != ESP_OK) return ESP_FAIL;
+
+    uint8_t ack;
+    if (read_full(c->sock, &ack, 1) != ESP_OK) return ESP_FAIL;
+    if (ack != 0) {
+        ESP_LOGE(TAG, "Server rejected VeNCrypt version 0.2");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    uint8_t n;
+    if (read_full(c->sock, &n, 1) != ESP_OK) return ESP_FAIL;
+    if (n == 0 || n > 16) {
+        ESP_LOGE(TAG, "VeNCrypt offered an unreasonable subtype count (%d)", n);
+        return ESP_FAIL;
+    }
+    uint8_t subtypes_raw[16 * 4];
+    if (read_full(c->sock, subtypes_raw, (size_t)n * 4) != ESP_OK) return ESP_FAIL;
+
+    bool have_plain = false;
+    for (int i = 0; i < n; i++) {
+        if (rd_u32(subtypes_raw + i * 4) == VENCRYPT_SUBTYPE_PLAIN) have_plain = true;
+    }
+    if (!have_plain) {
+        ESP_LOGE(TAG, "Server's VeNCrypt subtypes don't include Plain (256) - "
+                      "TLS-wrapped subtypes aren't supported here");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    uint8_t chosen[4];
+    wr_u32(chosen, VENCRYPT_SUBTYPE_PLAIN);
+    if (write_full(c->sock, chosen, 4) != ESP_OK) return ESP_FAIL;
+
+    uint32_t ulen = username ? strlen(username) : 0;
+    uint32_t plen = password ? strlen(password) : 0;
+    uint8_t lenbuf[4];
+
+    wr_u32(lenbuf, ulen);
+    if (write_full(c->sock, lenbuf, 4) != ESP_OK) return ESP_FAIL;
+    if (ulen > 0 && write_full(c->sock, username, ulen) != ESP_OK) return ESP_FAIL;
+
+    wr_u32(lenbuf, plen);
+    if (write_full(c->sock, lenbuf, 4) != ESP_OK) return ESP_FAIL;
+    if (plen > 0 && write_full(c->sock, password, plen) != ESP_OK) return ESP_FAIL;
+
+    return ESP_OK;
+}
+
 /* --- handshake ------------------------------------------------------------ */
 
-static esp_err_t do_handshake(rfb_client_t *c, const char *password)
+static esp_err_t do_handshake(rfb_client_t *c, const char *username, const char *password)
 {
     uint8_t buf[24];
 
@@ -171,15 +236,21 @@ static esp_err_t do_handshake(rfb_client_t *c, const char *password)
         if (n > sizeof(types)) n = sizeof(types);
         if (read_full(c->sock, types, n) != ESP_OK) return ESP_FAIL;
 
-        bool has_none = false, has_vncauth = false;
+        bool has_none = false, has_vncauth = false, has_vencrypt = false;
         for (int i = 0; i < n; i++) {
             if (types[i] == SEC_TYPE_NONE) has_none = true;
             if (types[i] == SEC_TYPE_VNCAUTH) has_vncauth = true;
+            if (types[i] == SEC_TYPE_VENCRYPT) has_vencrypt = true;
         }
-        /* Prefer None when offered; otherwise fall back to VNC auth. */
-        chosen_sec = has_none ? SEC_TYPE_NONE : (has_vncauth ? SEC_TYPE_VNCAUTH : SEC_TYPE_INVALID);
+        /* Prefer None (no auth needed) > VeNCrypt Plain (supports a
+         * username, and doesn't preclude an empty one) > classic VNC
+         * Auth (password only). */
+        chosen_sec = has_none ? SEC_TYPE_NONE
+                     : has_vencrypt ? SEC_TYPE_VENCRYPT
+                     : has_vncauth ? SEC_TYPE_VNCAUTH
+                     : SEC_TYPE_INVALID;
         if (chosen_sec == SEC_TYPE_INVALID) {
-            ESP_LOGE(TAG, "No supported security type offered (only None/VNCAuth handled)");
+            ESP_LOGE(TAG, "No supported security type offered (only None/VeNCrypt-Plain/VNCAuth handled)");
             return ESP_ERR_NOT_SUPPORTED;
         }
         uint8_t choice = chosen_sec;
@@ -200,10 +271,15 @@ static esp_err_t do_handshake(rfb_client_t *c, const char *password)
         if (read_full(c->sock, challenge, 16) != ESP_OK) return ESP_FAIL;
         vnc_auth_response(password, challenge, response);
         if (write_full(c->sock, response, 16) != ESP_OK) return ESP_FAIL;
+    } else if (chosen_sec == SEC_TYPE_VENCRYPT) {
+        esp_err_t err = negotiate_vencrypt(c, username, password);
+        if (err != ESP_OK) return err;
     }
 
-    /* SecurityResult: always present in 3.8; in 3.3/3.7 only after VNCAuth. */
-    if (is_38 || chosen_sec == SEC_TYPE_VNCAUTH) {
+    /* SecurityResult: always present in 3.8; in 3.3/3.7 only after
+     * VNCAuth or VeNCrypt (both are genuine auth attempts the server
+     * needs to accept/reject; plain "None" has nothing to check). */
+    if (is_38 || chosen_sec == SEC_TYPE_VNCAUTH || chosen_sec == SEC_TYPE_VENCRYPT) {
         uint8_t resb[4];
         if (read_full(c->sock, resb, 4) != ESP_OK) return ESP_FAIL;
         uint32_t result = rd_u32(resb);
@@ -443,7 +519,7 @@ void rfb_client_destroy(rfb_client_t *c)
 }
 
 esp_err_t rfb_client_connect(rfb_client_t *c, const char *host, uint16_t port,
-                              const char *password, uint32_t connect_timeout_ms)
+                              const char *username, const char *password, uint32_t connect_timeout_ms)
 {
     char port_str[6];
     snprintf(port_str, sizeof(port_str), "%u", port);
@@ -513,7 +589,7 @@ esp_err_t rfb_client_connect(rfb_client_t *c, const char *host, uint16_t port,
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
     c->sock = sock;
-    esp_err_t err = do_handshake(c, password);
+    esp_err_t err = do_handshake(c, username, password);
     if (err != ESP_OK) {
         close(sock);
         c->sock = -1;

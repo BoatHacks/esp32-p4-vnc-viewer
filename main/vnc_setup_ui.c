@@ -20,12 +20,14 @@ typedef struct {
     bool connect_pressed;
     char host[VNC_CONFIG_HOST_MAX_LEN + 1];
     char port_str[8];
+    char username[VNC_CONFIG_USER_MAX_LEN + 1];
     char password[VNC_CONFIG_PASS_MAX_LEN + 1];
 } ui_evt_t;
 
 static QueueHandle_t s_evt_queue;
 static lv_obj_t *s_host_ta;
 static lv_obj_t *s_port_ta;
+static lv_obj_t *s_user_ta;
 static lv_obj_t *s_pass_ta;
 static lv_obj_t *s_kb;
 
@@ -45,12 +47,14 @@ static void connect_btn_cb(lv_event_t *e)
     ui_evt_t evt = {.connect_pressed = true};
     strlcpy(evt.host, lv_textarea_get_text(s_host_ta), sizeof(evt.host));
     strlcpy(evt.port_str, lv_textarea_get_text(s_port_ta), sizeof(evt.port_str));
+    strlcpy(evt.username, lv_textarea_get_text(s_user_ta), sizeof(evt.username));
     strlcpy(evt.password, lv_textarea_get_text(s_pass_ta), sizeof(evt.password));
     xQueueSend(s_evt_queue, &evt, 0);
 }
 
 static void show_connection_screen(const char *status_line, const char *prev_host,
-                                    const char *prev_port, const char *prev_pass)
+                                    const char *prev_port, const char *prev_user,
+                                    const char *prev_pass)
 {
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_obj_set_style_pad_all(scr, 16, 0);
@@ -67,6 +71,7 @@ static void show_connection_screen(const char *status_line, const char *prev_hos
         lv_obj_align_to(status, title, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 8);
     }
 
+    /* Row 1: host + port */
     lv_obj_t *host_label = lv_label_create(scr);
     lv_label_set_text(host_label, "Host / IP address");
     lv_obj_align(host_label, LV_ALIGN_TOP_LEFT, 0, 56);
@@ -93,9 +98,25 @@ static void show_connection_screen(const char *status_line, const char *prev_hos
     lv_obj_align_to(s_port_ta, s_host_ta, LV_ALIGN_OUT_RIGHT_TOP, 16, 0);
     lv_obj_add_event_cb(s_port_ta, textarea_focus_cb, LV_EVENT_FOCUSED, NULL);
 
+    /* Row 2: username (optional - only some servers, e.g. via VeNCrypt
+     * Plain auth, actually use it; leave blank for classic VNC Auth or
+     * no-auth servers). */
+    lv_obj_t *user_label = lv_label_create(scr);
+    lv_label_set_text(user_label, "Username (leave blank if not needed)");
+    lv_obj_align_to(user_label, host_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 56);
+
+    s_user_ta = lv_textarea_create(scr);
+    lv_textarea_set_one_line(s_user_ta, true);
+    lv_textarea_set_max_length(s_user_ta, VNC_CONFIG_USER_MAX_LEN);
+    if (prev_user) lv_textarea_set_text(s_user_ta, prev_user);
+    lv_obj_set_width(s_user_ta, lv_pct(45));
+    lv_obj_align_to(s_user_ta, user_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 8);
+    lv_obj_add_event_cb(s_user_ta, textarea_focus_cb, LV_EVENT_FOCUSED, NULL);
+
+    /* Row 3: password + connect button */
     lv_obj_t *pass_label = lv_label_create(scr);
     lv_label_set_text(pass_label, "Password (leave blank if none)");
-    lv_obj_align_to(pass_label, host_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 56);
+    lv_obj_align_to(pass_label, user_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 56);
 
     s_pass_ta = lv_textarea_create(scr);
     lv_textarea_set_one_line(s_pass_ta, true);
@@ -114,7 +135,7 @@ static void show_connection_screen(const char *status_line, const char *prev_hos
 
     s_kb = lv_keyboard_create(scr);
     lv_keyboard_set_textarea(s_kb, s_host_ta);
-    lv_obj_set_size(s_kb, lv_pct(100), lv_pct(45));
+    lv_obj_set_size(s_kb, lv_pct(100), lv_pct(38));
     lv_obj_align(s_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     lv_scr_load(scr);
@@ -141,8 +162,9 @@ esp_err_t vnc_setup_ui_run(rfb_client_t *client)
 
     char host[VNC_CONFIG_HOST_MAX_LEN + 1] = {0};
     uint16_t port = 5900;
+    char username[VNC_CONFIG_USER_MAX_LEN + 1] = {0};
     char password[VNC_CONFIG_PASS_MAX_LEN + 1] = {0};
-    bool have_prev = vnc_config_load(host, sizeof(host), &port, password, sizeof(password));
+    bool have_prev = vnc_config_load(host, sizeof(host), &port, username, sizeof(username), password, sizeof(password));
     char port_str[8];
     snprintf(port_str, sizeof(port_str), "%u", have_prev ? port : 5900);
 
@@ -150,7 +172,7 @@ esp_err_t vnc_setup_ui_run(rfb_client_t *client)
 
     while (1) {
         lvgl_port_lock(0);
-        show_connection_screen(status, host, port_str, password);
+        show_connection_screen(status, host, port_str, username, password);
         lvgl_port_unlock();
         status = NULL;
 
@@ -160,6 +182,7 @@ esp_err_t vnc_setup_ui_run(rfb_client_t *client)
 
         strlcpy(host, evt.host, sizeof(host));
         strlcpy(port_str, evt.port_str, sizeof(port_str));
+        strlcpy(username, evt.username, sizeof(username));
         strlcpy(password, evt.password, sizeof(password));
 
         if (host[0] == '\0') {
@@ -177,10 +200,10 @@ esp_err_t vnc_setup_ui_run(rfb_client_t *client)
         show_connecting_screen(host, port);
         lvgl_port_unlock();
 
-        esp_err_t err = rfb_client_connect(client, host, port, password, CONNECT_TIMEOUT_MS);
+        esp_err_t err = rfb_client_connect(client, host, port, username, password, CONNECT_TIMEOUT_MS);
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "Connected to %s:%u via setup UI", host, port);
-            vnc_config_save(host, port, password);
+            vnc_config_save(host, port, username, password);
             vQueueDelete(s_evt_queue);
             s_evt_queue = NULL;
             return ESP_OK;

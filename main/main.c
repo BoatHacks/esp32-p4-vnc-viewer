@@ -213,13 +213,14 @@ static void vnc_task(void *arg)
 
         char host[VNC_CONFIG_HOST_MAX_LEN + 1] = {0};
         uint16_t port = 0;
+        char username[VNC_CONFIG_USER_MAX_LEN + 1] = {0};
         char password[VNC_CONFIG_PASS_MAX_LEN + 1] = {0};
-        bool have_cfg = vnc_config_load(host, sizeof(host), &port, password, sizeof(password));
+        bool have_cfg = vnc_config_load(host, sizeof(host), &port, username, sizeof(username), password, sizeof(password));
 
         esp_err_t err = ESP_FAIL;
         if (have_cfg) {
             ESP_LOGI(TAG, "Connecting to VNC server at %s:%u ...", host, port);
-            err = rfb_client_connect(client, host, port, password, SAVED_VNC_CONNECT_TIMEOUT_MS);
+            err = rfb_client_connect(client, host, port, username, password, SAVED_VNC_CONNECT_TIMEOUT_MS);
         }
 
         if (err != ESP_OK) {

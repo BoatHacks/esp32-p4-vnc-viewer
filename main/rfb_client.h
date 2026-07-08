@@ -53,14 +53,25 @@ rfb_client_t *rfb_client_create(const rfb_callbacks_t *callbacks);
 void rfb_client_destroy(rfb_client_t *client);
 
 /* Opens the TCP connection and runs the full RFB handshake (protocol
- * version negotiation, security type selection, VNC auth if requested,
+ * version negotiation, security type selection, authentication,
  * ClientInit/ServerInit). Blocks until the handshake finishes or fails,
  * bounded by connect_timeout_ms (covers both the initial TCP connect - so
  * an unreachable/wrong host fails fast instead of hanging - and each
- * individual handshake read/write). `password` may be NULL/empty if the
- * server offers Security-Type "None". */
+ * individual handshake read/write).
+ *
+ * Supports three security types, tried in this order if the server
+ * offers more than one: None (no auth), VeNCrypt "Plain" subtype
+ * (username + password, RFC-less but widely implemented by TigerVNC,
+ * RealVNC, etc. - no TLS involved despite the name), and classic VNC
+ * Authentication (password only, DES challenge-response - no username
+ * concept exists in this one, so `username` is ignored for it).
+ *
+ * `username` may be NULL/empty if the server doesn't require one (it's
+ * simply not sent for security types that don't use it). `password` may
+ * be NULL/empty if the server offers Security-Type "None". */
 esp_err_t rfb_client_connect(rfb_client_t *client, const char *host, uint16_t port,
-                              const char *password, uint32_t connect_timeout_ms);
+                              const char *username, const char *password,
+                              uint32_t connect_timeout_ms);
 
 /* Blocking receive loop - reads and dispatches server->client messages
  * (FramebufferUpdate, Bell, ServerCutText, SetColourMapEntries) until the

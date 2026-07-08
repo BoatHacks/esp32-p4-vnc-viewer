@@ -56,7 +56,7 @@ main/
 ## VNC server setup flow
 
 - **First boot** (no server saved yet): the connection dialog appears
-  immediately (host/IP, port, optional password).
+  immediately (host/IP, port, optional username, optional password).
 - **Saved server fails 3 times in a row** (wrong IP, server down,
   password changed, etc. - each attempt bounded to 8s so a bad address
   fails fast rather than hanging): same dialog reappears, pre-filled with
@@ -242,11 +242,14 @@ function's internals.
   thing that's still correct. `vnc_display.c`'s `on_raw_rect`/`on_copy_rect`
   are where you'd add scaling (or panning/scrolling) if you want the whole
   remote desktop visible.
-- **Auth**: supports Security-Type None and classic VNC (DES challenge-
-  response) authentication, matching RFB protocol versions 3.3/3.7/3.8.
-  It does not implement TLS-based security types (VeNCrypt etc.) - if your
-  server requires those, you'll need mbedtls TLS wrapped around the socket
-  in `rfb_client_connect()`.
+- **Auth**: supports Security-Type None, classic VNC (DES challenge-
+  response, password only), and VeNCrypt's "Plain" subtype (username +
+  password, cleartext - despite the name, no TLS involved), matching RFB
+  protocol versions 3.3/3.7/3.8. When a server offers more than one, None
+  is preferred, then VeNCrypt, then classic VNC Auth. TLS-wrapped
+  VeNCrypt subtypes (X509Plain etc.) aren't implemented - if your server
+  only offers those, you'll need mbedtls TLS wrapped around the socket in
+  `rfb_client_connect()`/`negotiate_vencrypt()`.
 - **Framebuffer memory**: the shadow copy lives in PSRAM
   (`MALLOC_CAP_SPIRAM`), sized to the panel's resolution
   (1024*600*2 bytes ~= 1.2 MB) - comfortably inside this board's PSRAM.
