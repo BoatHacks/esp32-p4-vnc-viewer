@@ -160,7 +160,7 @@ static void vnc_auth_response(const char *password, const uint8_t challenge[16],
     mbedtls_des_free(&des);
 }
 
-/* --- TLS wrapping for VeNCrypt's X509*/TLS* subtypes ---------------------
+/* --- TLS wrapping for VeNCrypt's X509-family subtypes ---------------------
  * Wraps the already-connected raw socket in a TLS session using mbedtls,
  * bridging to the existing fd via mbedtls_net_context (just a thin
  * wrapper around an fd - we don't use mbedtls_net_connect() since we
@@ -241,7 +241,7 @@ static void stop_tls(rfb_client_t *c)
  *  - 256 "Plain": send username+password in cleartext directly.
  *  - 262 "X509Plain": establish TLS first (see start_tls() above), then
  *    send username+password the same way, but now over that TLS session.
- * Other subtypes (TLSNone/TLSPlain/X509None/*SASL) aren't implemented. */
+ * Other subtypes (TLSNone, TLSPlain, X509None, and the SASL variants) aren't implemented. */
 #define VENCRYPT_SUBTYPE_PLAIN      256
 #define VENCRYPT_SUBTYPE_X509_PLAIN 262
 
