@@ -221,14 +221,17 @@ esp_err_t ota_start_periodic_check(const char *owner, const char *repo, const ch
     strlcpy(ctx->asset_name, asset_name, sizeof(ctx->asset_name));
     ctx->interval_hours = interval_hours;
 
-    /* 8KB previously here wasn't enough: a real device crashed with a
-     * Load access fault (classic stack-corruption symptom) right as it
-     * started downloading an update. This task does two TLS handshakes
-     * back to back (the GitHub API call, then esp_https_ota's own HTTPS
-     * download) plus cJSON parsing - all stack-hungry, especially the
-     * mbedTLS handshakes. 16KB internal RAM is a small, one-time cost
-     * given hundreds of KB free, and this task runs rarely. */
-    BaseType_t ok = xTaskCreate(periodic_task, "ota_check", 16384, ctx, 4, NULL);
+    /* 16KB (bumped from an original 8KB) still wasn't enough - a second
+     * real device crashed with the exact same faulting address
+     * (MEPC=0x4fc1b1e4) as the first incident, meaning it's a
+     * deterministic overflow at the same point in this task's call
+     * graph, not a one-off. cJSON's recursive-descent parser adds to
+     * the mbedTLS/esp_http_client stack pressure already here, and
+     * GitHub's release API response is a fairly deeply nested document.
+     * Being generous this time rather than nudging it again - 32KB
+     * internal RAM is still a trivial cost for a task that runs once a
+     * day, given hundreds of KB free. */
+    BaseType_t ok = xTaskCreate(periodic_task, "ota_check", 32768, ctx, 4, NULL);
     if (ok != pdPASS) {
         free(ctx);
         return ESP_FAIL;
