@@ -1,5 +1,3 @@
-@no-slop.md
-
 # esp32-p4-vnc-viewer
 
 From-scratch RFB/VNC client for a Waveshare ESP32-P4-WIFI6-Touch-LCD-7B board
